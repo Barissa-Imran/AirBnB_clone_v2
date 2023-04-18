@@ -1,81 +1,33 @@
 #!/usr/bin/python3
-"""Defines the DBStorage engine."""
+"""Defines the State class."""
+import models
 from os import getenv
 from models.base_model import Base
 from models.base_model import BaseModel
-from models.amenity import Amenity
 from models.city import City
-from models.place import Place
-from models.review import Review
-from models.state import State
-from models.user import User
-from sqlalchemy import create_engine
+from sqlalchemy import Column
+from sqlalchemy import String
 from sqlalchemy.orm import relationship
-from sqlalchemy.orm import scoped_session
-from sqlalchemy.orm import sessionmaker
 
 
-class DBStorage:
-    """Represents a database storage engine.
+class State(BaseModel, Base):
+    """Represents a state for a MySQL database.
+    Inherits from SQLAlchemy Base and links to the MySQL table states.
     Attributes:
-        __engine (sqlalchemy.Engine): The working SQLAlchemy engine.
-        __session (sqlalchemy.Session): The working SQLAlchemy session.
+        __tablename__ (str): The name of the MySQL table to store States.
+        name (sqlalchemy String): The name of the State.
+        cities (sqlalchemy relationship): The State-City relationship.
     """
+    __tablename__ = "states"
+    name = Column(String(128), nullable=False)
+    cities = relationship("City",  backref="state", cascade="delete")
 
-    __engine = None
-    __session = None
-
-    def __init__(self):
-        """Initialize a new DBStorage instance."""
-        self.__engine = create_engine("mysql+mysqldb://{}:{}@{}/{}".
-                                      format(getenv("HBNB_MYSQL_USER"),
-                                             getenv("HBNB_MYSQL_PWD"),
-                                             getenv("HBNB_MYSQL_HOST"),
-                                             getenv("HBNB_MYSQL_DB")),
-                                      pool_pre_ping=True)
-        if getenv("HBNB_ENV") == "test":
-            Base.metadata.drop_all(self.__engine)
-
-    def all(self, cls=None):
-        """Query on the curret database session all objects of the given class.
-        If cls is None, queries all types of objects.
-        Return:
-            Dict of queried classes in the format <class name>.<obj id> = obj.
-        """
-        if cls is None:
-            objs = self.__session.query(State).all()
-            objs.extend(self.__session.query(City).all())
-            objs.extend(self.__session.query(User).all())
-            objs.extend(self.__session.query(Place).all())
-            objs.extend(self.__session.query(Review).all())
-            objs.extend(self.__session.query(Amenity).all())
-        else:
-            if type(cls) == str:
-                cls = eval(cls)
-            objs = self.__session.query(cls)
-        return {"{}.{}".format(type(o).__name__, o.id): o for o in objs}
-
-    def new(self, obj):
-        """Add obj to the current database session."""
-        self.__session.add(obj)
-
-    def save(self):
-        """Commit all changes to the current database session."""
-        self.__session.commit()
-
-    def delete(self, obj=None):
-        """Delete obj from the current database session."""
-        if obj is not None:
-            self.__session.delete(obj)
-
-    def reload(self):
-        """Create all tables in the database and initialize a new session."""
-        Base.metadata.create_all(self.__engine)
-        session_factory = sessionmaker(bind=self.__engine,
-                                       expire_on_commit=False)
-        Session = scoped_session(session_factory)
-        self.__session = Session()
-
-    def close(self):
-        """Close the working SQLAlchemy session."""
-        self.__session.close()
+    if getenv("HBNB_TYPE_STORAGE") != "db":
+        @property
+        def cities(self):
+            """Get a list of all related City objects."""
+            city_list = []
+            for city in list(models.storage.all(City).values()):
+                if city.state_id == self.id:
+                    city_list.append(city)
+            return city_list
